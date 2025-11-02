@@ -18,7 +18,13 @@ import connectDB from "./db/index.js";
 import { createSocketServer } from "./SocketIo/SocketIo.js";
 
 // Create server
-const app = createSocketServer();
+let app;
+try {
+    app = createSocketServer();
+} catch (error) {
+    console.error('❌ Failed to create server:', error);
+    process.exit(1);
+}
 
 // Connect to MongoDB and start server
 const startServer = async () => {
@@ -43,8 +49,10 @@ startServer();
 
 // Export the app for Vercel
 export default async (req, res) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    
     // Add CORS headers
-    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader(
@@ -54,40 +62,71 @@ export default async (req, res) => {
 
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
+        console.log('Handling OPTIONS preflight request');
+        return res.status(200).end();
     }
 
-    // Handle the request
-    return new Promise((resolve, reject) => {
-        const { method, url, headers, body } = req;
-        const request = { ...req, method, url, headers, body };
-        const response = res;
+    try {
+        // Log request details for debugging
+        console.log('Request headers:', JSON.stringify(req.headers, null, 2));
+        console.log('Request body:', req.body);
         
-        response.on('finish', resolve);
-        
-        try {
-            app(request, response, (err) => {
-                if (err) {
-                    console.error('Error handling request:', err);
-                    if (!response.headersSent) {
-                        response.status(500).json({ 
-                            success: false, 
-                            message: 'Internal Server Error' 
-                        });
-                    }
+        // Create a promise to handle the request
+        return new Promise((resolve) => {
+            // Create a response handler
+            const response = {
+                ...res,
+                json: (data) => {
+                    console.log('Response:', JSON.stringify(data, null, 2));
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify(data));
+                    resolve();
+                },
+                status: (statusCode) => {
+                    console.log(`Status: ${statusCode}`);
+                    res.statusCode = statusCode;
+                    return response;
+                },
+                end: (data) => {
+                    if (data) console.log('Response data:', data);
+                    res.end(data);
                     resolve();
                 }
-            });
-        } catch (error) {
-            console.error('Unhandled error:', error);
-            if (!response.headersSent) {
-                response.status(500).json({ 
-                    success: false, 
-                    message: 'Internal Server Error' 
+            };
+
+            // Handle the request
+            try {
+                app(req, response, (err) => {
+                    if (err) {
+                        console.error('❌ Error in request handler:', err);
+                        if (!response.headersSent) {
+                            response.status(500).json({ 
+                                success: false, 
+                                message: 'Internal Server Error',
+                                error: process.env.NODE_ENV === 'development' ? err.message : undefined
+                            });
+                        }
+                    }
                 });
+            } catch (error) {
+                console.error('❌ Unhandled error in request handler:', error);
+                if (!response.headersSent) {
+                    response.status(500).json({ 
+                        success: false, 
+                        message: 'Internal Server Error',
+                        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+                    });
+                }
             }
-            resolve();
+        });
+    } catch (error) {
+        console.error('❌ Fatal error in serverless function:', error);
+        if (!res.headersSent) {
+            return res.status(500).json({ 
+                success: false, 
+                message: 'Internal Server Error',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
         }
-    });
+    }
 };
