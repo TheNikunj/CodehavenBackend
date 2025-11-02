@@ -78,7 +78,19 @@ const startServer = async () => {
 startServer();
 
 // Export the server for Vercel
-export default async (req, res) => {
+export default (req, res) => {
+    // Ensure res is a proper response object
+    if (!res || typeof res.setHeader !== 'function') {
+        console.error('Invalid response object:', res);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({
+                success: false,
+                message: 'Internal Server Error: Invalid response object'
+            })
+        };
+    }
+
     // Add CORS headers
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
@@ -90,77 +102,87 @@ export default async (req, res) => {
 
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+        res.status(200).end();
+        return { statusCode: 200 };
     }
 
-    // Handle HTTP requests
-    return new Promise((resolve) => {
-        const { method, url, headers } = req;
-        
-        // Log request details
-        console.log(`[${new Date().toISOString()}] ${method} ${url}`);
-        
-        // Handle request body
-        let body = [];
-        req.on('data', chunk => body.push(chunk));
-        
-        req.on('end', () => {
-            try {
-                if (body.length > 0) {
-                    req.body = JSON.parse(Buffer.concat(body).toString());
-                }
-                
-                const response = {
-                    ...res,
-                    json: (data) => {
-                        res.setHeader('Content-Type', 'application/json');
-                        res.end(JSON.stringify(data));
-                        resolve();
-                    },
-                    status: (statusCode) => {
-                        res.statusCode = statusCode;
-                        return response;
-                    },
-                    end: (data) => {
-                        res.end(data);
-                        resolve();
+    // Create a proper response object
+    const response = {
+        ...res,
+        json: (data) => {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(data));
+        },
+        status: (statusCode) => {
+            res.statusCode = statusCode;
+            return response;
+        },
+        end: (data) => {
+            res.end(data);
+        }
+    };
+
+    // Handle the request
+    try {
+        // If body is already parsed (as in Vercel), use it
+        if (req.body) {
+            return new Promise((resolve) => {
+                app(req, response, () => resolve({ statusCode: 200 }));
+            });
+        }
+
+        // Otherwise, handle the raw request
+        return new Promise((resolve) => {
+            let body = [];
+            
+            req.on('data', (chunk) => body.push(chunk));
+            
+            req.on('end', () => {
+                try {
+                    if (body.length > 0) {
+                        req.body = JSON.parse(Buffer.concat(body).toString());
                     }
-                };
-                
-                // Handle the request
-                app(req, response, (err) => {
-                    if (err) {
-                        console.error('Error in request handler:', err);
-                        if (!response.headersSent) {
-                            response.status(500).json({
-                                success: false,
-                                message: 'Internal Server Error',
-                                ...(process.env.NODE_ENV === 'development' && { error: err.message })
-                            });
+                    
+                    app(req, response, (err) => {
+                        if (err) {
+                            console.error('Error in request handler:', err);
+                            if (!response.headersSent) {
+                                response.status(500).json({
+                                    success: false,
+                                    message: 'Internal Server Error',
+                                    ...(process.env.NODE_ENV === 'development' && { error: err.message })
+                                });
+                            }
                         }
-                    }
-                });
-                
-            } catch (error) {
-                console.error('Error processing request:', error);
-                res.statusCode = 500;
-                res.end(JSON.stringify({
+                        resolve({ statusCode: response.statusCode || 200 });
+                    });
+                } catch (error) {
+                    console.error('Error processing request:', error);
+                    response.status(500).json({
+                        success: false,
+                        message: 'Internal Server Error',
+                        ...(process.env.NODE_ENV === 'development' && { error: error.message })
+                    });
+                    resolve({ statusCode: 500 });
+                }
+            });
+            
+            req.on('error', (error) => {
+                console.error('Request error:', error);
+                response.status(500).json({
                     success: false,
-                    message: 'Internal Server Error',
-                    ...(process.env.NODE_ENV === 'development' && { error: error.message })
-                }));
-                resolve();
-            }
+                    message: 'Internal Server Error'
+                });
+                resolve({ statusCode: 500 });
+            });
         });
-        
-        req.on('error', (error) => {
-            console.error('Request error:', error);
-            res.statusCode = 500;
-            res.end(JSON.stringify({
-                success: false,
-                message: 'Internal Server Error'
-            }));
-            resolve();
+    } catch (error) {
+        console.error('Fatal error in request handler:', error);
+        response.status(500).json({
+            success: false,
+            message: 'Internal Server Error',
+            ...(process.env.NODE_ENV === 'development' && { error: error.message })
         });
-    });
+        return { statusCode: 500 };
+    }
 };
