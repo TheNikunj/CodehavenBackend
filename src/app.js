@@ -44,11 +44,36 @@ import problemRouter from './routes/problem.routes.js'
 import runcodeRouter from './routes/runcode.route.js'
 import submissionRouter from './routes/submission.routes.js'
 
-//Routes Declaration
-app.use('/api/v1/users',userRouter);
-app.use('/api/v1/tweet',tweetRouter);
-app.use('/api/v1/problem',problemRouter);
-app.use('/api/v1/runcode',runcodeRouter);
-app.use('/api/v1/submissions',submissionRouter);
+// Routes Declaration
+app.use('/api/v1/users', userRouter);
+app.use('/api/v1/tweet', tweetRouter);
+app.use('/api/v1/problem', problemRouter);
+app.use('/api/v1/runcode', runcodeRouter);
+app.use('/api/v1/submissions', submissionRouter);
 
-export {app}
+// 404 handler
+app.use((req, res, next) => {
+    res.status(404).json({
+        success: false,
+        message: 'Route not found',
+        error: {
+            statusCode: 404,
+            message: `Cannot ${req.method} ${req.path}`
+        }
+    });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(err.status || 500).json({
+        success: false,
+        message: err.message || 'Internal Server Error',
+        ...(process.env.NODE_ENV === 'development' && { 
+            error: err.message,
+            stack: err.stack 
+        })
+    });
+});
+
+export { app };

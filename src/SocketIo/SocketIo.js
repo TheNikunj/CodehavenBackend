@@ -6,11 +6,21 @@ export const createSocketServer = () => {
     const server = http.createServer(app);
     const io = new Server(server, {
         cors: {
-            origin: process.env.CORS_ORIGIN,
-            methods:  ['GET','POST','PUT','DELETE','PATCH'],
-            credentials: true  
+            origin: process.env.CORS_ORIGIN || '*', // Fallback to '*' if CORS_ORIGIN is not set
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization'],
+            credentials: true
+        },
+        // Add connection state recovery options
+        connectionStateRecovery: {
+            // The backup duration of the sessions and the packets
+            maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+            // Skip middlewares upon successful recovery
+            skipMiddlewares: true,
         }
     });
+    
+    console.log('Socket.IO server initialized with CORS origin:', process.env.CORS_ORIGIN || '*');
 
     io.on('connection', (socket) => {
         console.log('User connected',socket.id);
