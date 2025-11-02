@@ -81,7 +81,17 @@ import problemRouter from '../src/routes/problem.routes.js';
 import runcodeRouter from '../src/routes/runcode.route.js';
 import submissionRouter from '../src/routes/submission.routes.js';
 
-// Routes
+// Health check endpoint
+app.get('/', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: 'CodeHaven API is running',
+        version: '1.0.0',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// API Routes
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/tweet', tweetRouter);
 app.use('/api/v1/problem', problemRouter);
