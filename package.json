@@ -4,10 +4,9 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "dev": "nodemon -r dotenv/config --experimental-json-modules src/server.js",
-    "start": "node src/server.js",
-    "vercel": "node src/server.js",
-    "build": "echo 'No build step required for this project'"
+    "dev": "nodemon --experimental-json-modules api/index.js",
+    "start": "node api/index.js",
+    "vercel-build": "echo 'No build step required for this project'"
   },
   "author": "Nikunj Kumar",
   "license": "ISC",
